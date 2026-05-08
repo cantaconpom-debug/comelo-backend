@@ -20,14 +20,13 @@ const app = express();
 
 // ===== CONTROL LIMITES IA FREE / PRO =====
 async function comprobarLimiteGeneraciones(userId, coste = 1) {
-
   if (!userId) {
     throw new Error('Usuario no identificado');
   }
 
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select('id, plan, daily_generations, last_generation_date')
     .eq('id', userId)
     .single();
 
@@ -35,9 +34,12 @@ async function comprobarLimiteGeneraciones(userId, coste = 1) {
     throw new Error('Perfil no encontrado');
   }
 
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = new Date().toISOString().slice(0, 10);
+  let usados = Number(profile.daily_generations || 0);
 
   if (profile.last_generation_date !== hoy) {
+    usados = 0;
+
     await supabase
       .from('profiles')
       .update({
@@ -45,28 +47,34 @@ async function comprobarLimiteGeneraciones(userId, coste = 1) {
         last_generation_date: hoy,
       })
       .eq('id', userId);
-
-    profile.daily_generations = 0;
   }
 
-  const esPro = (profile.plan || '').toLowerCase() === 'pro';
-  const limiteDiario = esPro ? 30 : 3;
-  const usados = Number(profile.daily_generations || 0);
+  const esPro = String(profile.plan || '').toLowerCase() === 'pro';
+  const limite = esPro ? 30 : 3;
 
-  if (usados + coste > limiteDiario) {
+  if (usados + coste > limite) {
     throw new Error(
       esPro
-        ? 'Has alcanzado el límite diario PRO de uso intensivo. Vuelve mañana.'
-        : '💎 Has alcanzado el límite diario FREE. Hazte Pro para más uso de IA.'
+        ? 'Has agotado tus 30 créditos IA de hoy. Vuelve mañana.'
+        : '💎 Has agotado tus 3 créditos FREE de hoy. Hazte Pro para más créditos.'
     );
   }
+
+  const nuevosUsados = usados + coste;
 
   await supabase
     .from('profiles')
     .update({
-      daily_generations: usados + coste
+      daily_generations: nuevosUsados,
+      last_generation_date: hoy,
     })
     .eq('id', userId);
+
+  return {
+    usados: nuevosUsados,
+    limite,
+    disponibles: Math.max(limite - nuevosUsados, 0),
+  };
 }
 
 
