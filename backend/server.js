@@ -81,6 +81,61 @@ app.get('/', (req, res) => {
   res.send('Backend MenuMes funcionando');
 });
 
+
+app.post('/uso-ia', async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'Usuario no identificado' });
+    }
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error || !profile) {
+      return res.status(404).json({ error: 'Perfil no encontrado' });
+    }
+
+    const hoy = new Date().toISOString().split('T')[0];
+    let usados = Number(profile.daily_generations || 0);
+
+    if (profile.last_generation_date !== hoy) {
+      usados = 0;
+
+      await supabase
+        .from('profiles')
+        .update({
+          daily_generations: 0,
+          last_generation_date: hoy,
+        })
+        .eq('id', userId);
+    }
+
+    const esPro = (profile.plan || '').toLowerCase() === 'pro';
+    const limite = esPro ? 30 : 3;
+
+    res.json({
+      plan: esPro ? 'pro' : 'free',
+      usados,
+      limite,
+      disponibles: Math.max(limite - usados, 0),
+      costes: {
+        generarMenu: 3,
+        cambiarReceta: 1,
+        escanerNevera: 2,
+      },
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 app.post('/generar-menu', async (req, res) => {
   try {
     const body = req.body;
