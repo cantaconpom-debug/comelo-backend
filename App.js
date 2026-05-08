@@ -182,6 +182,7 @@ const intoleranciasOpciones = [
 
   const [menu, setMenu] = useState(null);
 const [remainingGenerations, setRemainingGenerations] = useState(3);
+const [usoIA, setUsoIA] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [menuCreadoOk, setMenuCreadoOk] = useState(false);
   const [mostrarCuenta, setMostrarCuenta] = useState(false);
@@ -378,11 +379,15 @@ const refrescarPerfil = async () => {
       const res = await fetch(`${BASE_URL}/escanear-nevera`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64 }),
+        body: JSON.stringify({
+          imageBase64,
+          userId: sesion?.user?.id,
+        }),
       });
 
       const data = await res.json();
       setResultadoNevera(data);
+      cargarUsoIA();
 
     } catch (e) {
       alert('Error escaneando nevera: ' + e.message);
@@ -452,6 +457,29 @@ const refrescarPerfil = async () => {
   };
 
 
+
+  const cargarUsoIA = async () => {
+    try {
+      if (!sesion?.user?.id) return;
+
+      const res = await fetch(`${BASE_URL}/uso-ia`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: sesion.user.id }),
+      });
+
+      const data = await res.json();
+
+      if (data && typeof data.limite !== 'undefined') {
+        setUsoIA(data);
+        setRemainingGenerations(data.disponibles);
+      }
+    } catch (e) {
+      console.log('Error cargando créditos IA:', e.message);
+    }
+  };
+
+
 const generarMenu = async () => {
     if (!sesion?.user) return;
 
@@ -489,6 +517,7 @@ const generarMenu = async () => {
       }
 
       setMenu(resultado);
+      cargarUsoIA();
       setPantalla('calendario');
 
     } catch (e) {
@@ -513,6 +542,7 @@ const generarMenu = async () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          userId: sesion?.user?.id,
           tipo,
           nombreAnterior: recetaActual.nombre,
           calorias: recetaActual.calorias,
@@ -556,6 +586,7 @@ const generarMenu = async () => {
       );
 
       setMenu(nuevoMenu);
+      cargarUsoIA();
       alert('✅ Receta cambiada correctamente');
 
     } catch (err) {
@@ -604,6 +635,7 @@ const generarMenu = async () => {
 
   useEffect(() => {
     cargarFavoritos();
+    cargarUsoIA();
   }, [sesion]);
 
   const cargarFavoritos = async () => {
@@ -777,6 +809,53 @@ const generarMenu = async () => {
                 </View>
               )}
 
+
+              
+              <View style={styles.creditCard}>
+                <View style={styles.creditTop}>
+                  <View>
+                    <Text style={styles.creditTitle}>⚡ Créditos IA</Text>
+                    <Text style={styles.creditSub}>
+                      {`${usoIA?.disponibles ?? (esPro ? 30 : 3)}/${usoIA?.limite ?? (esPro ? 30 : 3)} disponibles hoy`}
+                    </Text>
+                  </View>
+
+                  <View style={styles.creditBadge}>
+                    <Text style={styles.creditBadgeTxt}>
+                      {(profile?.plan || 'free').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.creditBarBg}>
+                  <View
+                    style={[
+                      styles.creditBarFill,
+                      {
+                        width: `${Math.max(((usoIA?.disponibles ?? (esPro ? 30 : 3)) / (usoIA?.limite ?? (esPro ? 30 : 3))) * 100, 4)}%`
+                      }
+                    ]}
+                  />
+                </View>
+
+                <View style={styles.creditCosts}>
+                  <Text style={styles.creditCost}>🍽️ Menú: 3</Text>
+                  <Text style={styles.creditCost}>🔄 Receta: 1</Text>
+                  <Text style={styles.creditCost}>📸 Nevera: 2</Text>
+                </View>
+
+                {!esPro && usoIA?.disponibles <= 0 && (
+                  <TouchableOpacity
+                    activeOpacity={0.82}
+                    style={styles.creditBtn}
+                    onPress={hacerPro}
+                  >
+                    <Text style={styles.creditBtnTxt}>
+                      Conseguir más créditos con Pro 🚀
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
               <View style={styles.dashboardWrap}>
                 <View style={styles.dashboardHeader}>
@@ -4264,5 +4343,91 @@ Object.assign(styles, {
     color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 15,
+  },
+});
+
+
+// ===== CREDITOS IA =====
+Object.assign(styles, {
+  creditCard: {
+    backgroundColor: '#111827',
+    borderRadius: 26,
+    padding: 18,
+    marginBottom: 18,
+    borderWidth: 2,
+    borderColor: '#FF8A1F',
+  },
+
+  creditTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  creditTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+
+  creditSub: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+
+  creditBadge: {
+    backgroundColor: '#FF8A1F',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
+  creditBadgeTxt: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  creditBarBg: {
+    width: '100%',
+    height: 10,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 999,
+    marginTop: 16,
+    overflow: 'hidden',
+  },
+
+  creditBarFill: {
+    height: 10,
+    backgroundColor: '#FF8A1F',
+    borderRadius: 999,
+  },
+
+  creditCosts: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+  },
+
+  creditCost: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  creditBtn: {
+    backgroundColor: '#FF8A1F',
+    borderRadius: 18,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+
+  creditBtnTxt: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
   },
 });
