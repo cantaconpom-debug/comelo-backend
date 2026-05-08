@@ -18,8 +18,12 @@ const supabase = createClient(
 const app = express();
 
 
-// ===== CONTROL LIMITES FREE =====
-async function comprobarLimiteGeneraciones(userId) {
+// ===== CONTROL LIMITES IA FREE / PRO =====
+async function comprobarLimiteGeneraciones(userId, coste = 1) {
+
+  if (!userId) {
+    throw new Error('Usuario no identificado');
+  }
 
   const { data: profile, error } = await supabase
     .from('profiles')
@@ -31,16 +35,9 @@ async function comprobarLimiteGeneraciones(userId) {
     throw new Error('Perfil no encontrado');
   }
 
-  // PRO = ilimitado
-  if ((profile.plan || '').toLowerCase() === 'pro') {
-    return;
-  }
-
   const hoy = new Date().toISOString().split('T')[0];
 
-  // Reiniciar contador nuevo día
   if (profile.last_generation_date !== hoy) {
-
     await supabase
       .from('profiles')
       .update({
@@ -52,16 +49,22 @@ async function comprobarLimiteGeneraciones(userId) {
     profile.daily_generations = 0;
   }
 
-  // Límite FREE
-  if ((profile.daily_generations || 0) >= 3) {
-    throw new Error('💎 Has alcanzado el límite diario FREE. Hazte Pro para generaciones ilimitadas.');
+  const esPro = (profile.plan || '').toLowerCase() === 'pro';
+  const limiteDiario = esPro ? 30 : 3;
+  const usados = Number(profile.daily_generations || 0);
+
+  if (usados + coste > limiteDiario) {
+    throw new Error(
+      esPro
+        ? 'Has alcanzado el límite diario PRO de uso intensivo. Vuelve mañana.'
+        : '💎 Has alcanzado el límite diario FREE. Hazte Pro para más uso de IA.'
+    );
   }
 
-  // Incrementar contador
   await supabase
     .from('profiles')
     .update({
-      daily_generations: (profile.daily_generations || 0) + 1
+      daily_generations: usados + coste
     })
     .eq('id', userId);
 }
@@ -82,83 +85,67 @@ app.post('/generar-menu', async (req, res) => {
   try {
     const body = req.body;
 
-    await comprobarLimiteGeneraciones(body.userId);
+    await comprobarLimiteGeneraciones(body.userId, 3);
     const comidas = body.plan === 'pro'
       ? body.comidasSeleccionadas
       : ['comida', 'cena'];
 
-    const prompt = `
-Responde SOLO con JSON válido. No uses markdown.
+    const kcal = Number(body.calorias || 2000);
+const kcalMin = Math.round(kcal * 0.95);
+const kcalMax = Math.round(kcal * 1.05);
 
-Crea un menú semanal de 7 días.
-Cada día debe incluir exactamente estas comidas: ${comidas.join(', ')}.
+const prompt = `
+SOLO JSON válido. Sin markdown.
 
-Formato:
+Genera menú semanal.
+Días: 7.
+Comidas por día: ${comidas.join(', ')}.
+Personas: ${body.personas || 1}.
+Kcal/día: ${kcal} rango ${kcalMin}-${kcalMax}.
+Preferencias: ${(body.preferencias || []).join(', ') || 'ninguna'}.
+Restricciones: ${(body.intolerancias || []).join(', ') || 'ninguna'}.
+Supermercado: ${body.supermercado || 'Mercadona'}.
+Presupuesto semanal: ${body.presupuesto || 'libre'}.
+
+JSON exacto:
 {
-  "dias": [
+ "dias":[
+  {
+   "dia":1,
+   "comidas":[
     {
-      "dia": 1,
-      "comidas": [
-        {
-          "tipo": "comida",
-          "nombre": "Nombre del plato",
-          "calorias": 500,
-          "tiempo": 20,
-          "proteinas": 30,
-          "carbohidratos": 50,
-          "emoji": "🍝",
-          "dificultad": "Fácil",
-          "ingredientes": [{"cantidad": "200g", "nombre": "Ingrediente"}],
-          "pasos": ["Paso 1", "Paso 2"],
-          "consejo": "Consejo"
-        }
-      ]
+     "tipo":"comida",
+     "nombre":"Plato",
+     "calorias":500,
+     "tiempo":20,
+     "proteinas":30,
+     "carbohidratos":50,
+     "emoji":"🍽️",
+     "dificultad":"Fácil",
+     "ingredientes":[{"cantidad":"200g","nombre":"Ingrediente"}],
+     "pasos":["Paso breve 1","Paso breve 2"],
+     "consejo":"Consejo breve"
     }
-  ],
-  "ingredientes": [
-    {"nombre": "Ingrediente", "cantidad": "1 unidad", "precio": 1.5, "categoria": "General"}
-  ]
+   ]
+  }
+ ],
+ "ingredientes":[
+  {"nombre":"Ingrediente","cantidad":"1 unidad","precio":1.5,"categoria":"General"}
+ ]
 }
 
 Reglas:
-- Devuelve exactamente 7 días.
-- Cada día debe tener exactamente estas comidas: ${comidas.join(', ')}.
-- Cada comida debe tener máximo 4 ingredientes y 4 pasos.
-- La lista global ingredientes debe tener entre 8 y 14 productos.
-- Preferencias: ${(body.preferencias || []).join(', ')}
-- Restricciones e intolerancias: ${(body.intolerancias || []).join(', ') || 'ninguna'}
-- Si hay restricciones, NO incluyas ingredientes incompatibles.
-- Si aparece "Sin gluten", evita pan, pasta normal, harina de trigo, couscous y similares salvo que sean sin gluten.
-- Si aparece "Sin lactosa", evita leche, queso, yogur y nata salvo versiones sin lactosa.
-- Si aparece "Sin frutos secos", evita almendras, nueces, cacahuetes, pistachos y similares.
-- Si aparece "Sin marisco", evita gambas, langostinos, mejillones, calamares y similares.
-- Si aparece "Sin huevo", no uses huevo ni salsas con huevo.
-- Si aparece "Bajo en azúcar", evita postres azucarados, miel, azúcar añadido y bollería.
-- Si aparece "Bajo en sal", evita embutidos, conservas saladas y exceso de sal.
-- Si aparece "Halal", evita cerdo, jamón, bacon, chorizo y alcohol.
-- Personas: ${body.personas}
-- Supermercado: ${body.supermercado}
-- Presupuesto semanal elegido: ${body.presupuesto || 'libre'} euros.
-
-REGLA CRÍTICA DE PRESUPUESTO:
-- Si el presupuesto es 30, crea recetas económicas con ingredientes baratos, básicos y repetibles.
-- Si el presupuesto es 50, crea un menú equilibrado entre precio, variedad y calidad.
-- Si el presupuesto es 70, permite ingredientes más variados y premium, pero sin excesos.
-- Si el presupuesto es libre, prioriza calidad nutricional, variedad y sabor.
-- La lista global de ingredientes debe aproximarse al presupuesto semanal elegido.
-- Los precios deben ser realistas para supermercado en España.
-- Evita ingredientes caros si el presupuesto es bajo.
-
-REGLA CRÍTICA DE CALORÍAS:
-- Objetivo diario exacto: ${body.calorias} kcal.
-- La suma de calorías de todas las comidas de cada día debe estar entre ${Math.round(Number(body.calorias) * 0.95)} y ${Math.round(Number(body.calorias) * 1.05)} kcal.
-- No generes días por debajo de ${Math.round(Number(body.calorias) * 0.95)} kcal.
-- No generes días por encima de ${Math.round(Number(body.calorias) * 1.05)} kcal.
-- Ajusta raciones, cantidades e ingredientes para acercarte al objetivo.
-- Si el objetivo es alto, aumenta raciones, añade frutos secos, arroz, pasta, pan integral, aceite de oliva, aguacate o lácteos.
-- Si el objetivo es bajo, reduce raciones y prioriza verduras, proteína magra y platos ligeros.
-- Las calorías deben ser realistas y coherentes con los ingredientes.
-- Antes de responder, comprueba mentalmente la suma diaria.
+- Exactamente 7 días.
+- Cada día incluye exactamente: ${comidas.join(', ')}.
+- Total kcal diario entre ${kcalMin} y ${kcalMax}.
+- Máx 4 ingredientes y 4 pasos por receta.
+- Pasos de máx 12 palabras.
+- Lista compra: 8-14 productos, precios realistas España.
+- Si presupuesto=30: barato y repetible.
+- Si presupuesto=50: equilibrado.
+- Si presupuesto=70: más variedad.
+- Si restricciones no son "ninguna", evita ingredientes incompatibles.
+- Halal: sin cerdo, jamón, bacon, chorizo ni alcohol.
 `;
 
     const response = await fetch(
@@ -216,38 +203,40 @@ REGLA CRÍTICA DE CALORÍAS:
 
 app.post('/escanear-nevera', async (req, res) => {
   try {
-    const { imageBase64 } = req.body;
+    const { imageBase64, userId } = req.body;
+
+    await comprobarLimiteGeneraciones(userId, 2);
 
     if (!imageBase64) {
       return res.status(400).json({ error: 'Falta imagen' });
     }
 
     const prompt = `
-Responde SOLO con JSON válido.
-Analiza esta foto de nevera/despensa.
+SOLO JSON válido. Sin markdown.
+Analiza imagen de nevera/despensa.
 
-Devuelve:
+JSON exacto:
 {
-  "ingredientesDetectados": ["ingrediente 1", "ingrediente 2"],
-  "recetasSugeridas": [
-    {
-      "nombre": "Nombre receta",
-      "emoji": "🍽️",
-      "tiempo": 20,
-      "dificultad": "Fácil",
-      "calorias": 500,
-      "ingredientes": ["ingrediente 1", "ingrediente 2"],
-      "idea": "Breve explicación"
-    }
-  ],
-  "consejo": "Consejo práctico para aprovechar mejor esos alimentos"
+ "ingredientesDetectados":["ingrediente"],
+ "recetasSugeridas":[
+  {
+   "nombre":"Receta",
+   "emoji":"🍽️",
+   "tiempo":20,
+   "dificultad":"Fácil",
+   "calorias":500,
+   "ingredientes":["ingrediente"],
+   "idea":"Idea breve"
+  }
+ ],
+ "consejo":"Consejo breve"
 }
 
 Reglas:
-- Máximo 10 ingredientes detectados.
-- Máximo 3 recetas.
-- Recetas saludables, sencillas y realistas.
-- Si no reconoces bien la imagen, dilo en el JSON.
+- Máx 10 ingredientes.
+- Máx 3 recetas.
+- Recetas saludables y realistas.
+- Si la imagen no es clara, devuelve ingredientesDetectados vacío y consejo explicativo.
 `;
 
     const response = await fetch(
@@ -292,43 +281,42 @@ app.post('/regenerar-receta', async (req, res) => {
   try {
     const body = req.body;
 
+    await comprobarLimiteGeneraciones(body.userId, 1);
+
     const prompt = `
-Responde SOLO con JSON válido. No uses markdown.
+SOLO JSON válido. Sin markdown.
+Genera 1 receta nueva.
 
-Regenera UNA sola receta para sustituir la receta actual.
+Datos:
+tipo=${body.tipo || 'comida'}
+kcal=${body.calorias || 500}
+personas=${body.personas || 1}
+preferencias=${(body.preferencias || []).join(', ') || 'ninguna'}
+restricciones=${(body.intolerancias || []).join(', ') || 'ninguna'}
+supermercado=${body.supermercado || 'Mercadona'}
+evitar=${body.nombreAnterior || 'ninguna'}
 
-Tipo de comida: ${body.tipo || 'comida'}
-Calorías objetivo aproximadas: ${body.calorias || 500}
-Personas: ${body.personas || 1}
-Preferencias: ${(body.preferencias || []).join(', ') || 'ninguna'}
-Intolerancias: ${(body.intolerancias || []).join(', ') || 'ninguna'}
-Supermercado: ${body.supermercado || 'Mercadona'}
-Receta anterior a evitar: ${body.nombreAnterior || 'ninguna'}
-
-Formato exacto:
+JSON exacto:
 {
-  "tipo": "${body.tipo || 'comida'}",
-  "nombre": "Nombre del plato",
-  "calorias": 500,
-  "tiempo": 20,
-  "proteinas": 30,
-  "carbohidratos": 50,
-  "emoji": "🍽️",
-  "dificultad": "Fácil",
-  "ingredientes": [
-    {"cantidad": "200g", "nombre": "Ingrediente"}
-  ],
-  "pasos": ["Paso 1", "Paso 2", "Paso 3"],
-  "consejo": "Consejo útil"
+ "tipo":"${body.tipo || 'comida'}",
+ "nombre":"Plato",
+ "calorias":500,
+ "tiempo":20,
+ "proteinas":30,
+ "carbohidratos":50,
+ "emoji":"🍽️",
+ "dificultad":"Fácil",
+ "ingredientes":[{"cantidad":"200g","nombre":"Ingrediente"}],
+ "pasos":["Paso breve 1","Paso breve 2"],
+ "consejo":"Consejo breve"
 }
 
 Reglas:
-- No repitas la receta anterior.
-- Máximo 4 ingredientes.
-- Máximo 4 pasos.
-- Respeta intolerancias.
-- Respeta preferencias.
-- Mantén calorías lo más cerca posible del objetivo.
+- No repetir evitar.
+- Máx 4 ingredientes y 4 pasos.
+- Pasos máx 12 palabras.
+- Respetar preferencias y restricciones.
+- Kcal cercana al objetivo.
 `;
 
     const response = await fetch(
