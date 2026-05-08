@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Comelo",
+    "slug": "Comelo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF7ED"
+    },
+    "android": {
+      "package": "com.cantaconpom.Comelo",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFF7ED"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.cantaconpom.Comelo",
+      "supportsTablet": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "35686ea0-63d1-4091-a6a3-41f001437ca8"
+      }
+    }
+  }
+}
