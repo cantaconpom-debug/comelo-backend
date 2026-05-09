@@ -54,13 +54,13 @@ async function comprobarCreditosIA(userId, coste = 1) {
   }
 
   const esPro = String(profile.plan || '').toLowerCase() === 'pro';
-  const limite = esPro ? 30 : 3;
+  const limite = esPro ? 30 : 7;
 
   if (usados + coste > limite) {
     const err = new Error(
       esPro
         ? 'Has agotado tus 30 créditos IA de hoy. Vuelve mañana.'
-        : '💎 Has agotado tus 3 créditos FREE de hoy. Hazte Pro para más créditos.'
+        : '💎 Has agotado tus 7 créditos FREE de hoy. Hazte Pro para más créditos.'
     );
     err.statusCode = 403;
     throw err;
@@ -134,7 +134,7 @@ app.post('/uso-ia', async (req, res) => {
     }
 
     const esPro = (profile.plan || '').toLowerCase() === 'pro';
-    const limite = esPro ? 30 : 3;
+    const limite = esPro ? 30 : 7;
 
     res.json({
       plan: esPro ? 'pro' : 'free',
