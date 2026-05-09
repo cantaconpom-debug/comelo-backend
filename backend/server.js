@@ -18,10 +18,12 @@ const supabase = createClient(
 const app = express();
 
 
-// ===== CONTROL LIMITES IA FREE / PRO =====
-async function comprobarLimiteGeneraciones(userId, coste = 1) {
+// ===== CONTROL CREDITOS IA FREE / PRO =====
+async function comprobarCreditosIA(userId, coste = 1) {
   if (!userId) {
-    throw new Error('Usuario no identificado');
+    const err = new Error('Usuario no identificado');
+    err.statusCode = 401;
+    throw err;
   }
 
   const { data: profile, error } = await supabase
@@ -31,7 +33,9 @@ async function comprobarLimiteGeneraciones(userId, coste = 1) {
     .single();
 
   if (error || !profile) {
-    throw new Error('Perfil no encontrado');
+    const err = new Error('Perfil no encontrado');
+    err.statusCode = 404;
+    throw err;
   }
 
   const hoy = new Date().toISOString().slice(0, 10);
@@ -53,11 +57,13 @@ async function comprobarLimiteGeneraciones(userId, coste = 1) {
   const limite = esPro ? 30 : 3;
 
   if (usados + coste > limite) {
-    throw new Error(
+    const err = new Error(
       esPro
         ? 'Has agotado tus 30 créditos IA de hoy. Vuelve mañana.'
         : '💎 Has agotado tus 3 créditos FREE de hoy. Hazte Pro para más créditos.'
     );
+    err.statusCode = 403;
+    throw err;
   }
 
   const nuevosUsados = usados + coste;
@@ -76,6 +82,10 @@ async function comprobarLimiteGeneraciones(userId, coste = 1) {
     disponibles: Math.max(limite - nuevosUsados, 0),
   };
 }
+
+// Alias por compatibilidad
+const comprobarLimiteGeneraciones = comprobarCreditosIA;
+
 
 
 
@@ -148,7 +158,7 @@ app.post('/generar-menu', async (req, res) => {
   try {
     const body = req.body;
 
-    await comprobarLimiteGeneraciones(body.userId, 3);
+    await comprobarCreditosIA(body.userId, 3);
     const comidas = body.plan === 'pro'
       ? body.comidasSeleccionadas
       : ['comida', 'cena'];
@@ -258,7 +268,7 @@ Reglas:
 
   } catch (error) {
     console.log(error);
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 
@@ -343,6 +353,8 @@ Reglas:
 app.post('/regenerar-receta', async (req, res) => {
   try {
     const body = req.body;
+
+    await comprobarCreditosIA(body.userId, 1);
 
     await comprobarLimiteGeneraciones(body.userId, 1);
 
