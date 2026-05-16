@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, ActivityIndicator, ImageBackground, Image } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, ActivityIndicator, ImageBackground,
+  ScrollView, Image } from 'react-native';
 import { useState } from 'react';
 import { supabase } from './supabase';
 
@@ -46,9 +47,14 @@ export default function AuthScreen({ onLogin }) {
   };
 
   return (
-    <ImageBackground source={require('./assets/fondo.jpg')} style={styles.bg} blurRadius={18}>
+    <View style={styles.bg}>
       <View style={styles.overlay}>
         <SafeAreaView style={styles.container}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
 
           <View style={styles.hero}>
             <View style={styles.logoCircle}>
@@ -140,33 +146,39 @@ export default function AuthScreen({ onLogin }) {
             </Text>
           </View>
 
+          </ScrollView>
         </SafeAreaView>
       </View>
-    </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   bg: {
     flex: 1,
+    backgroundColor: '#0F172A',
   },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.38)',
+    backgroundColor: '#0F172A',
   },
   container: {
     flex: 1,
+    paddingHorizontal: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingVertical: 28,
   },
   hero: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 22,
   },
   logoCircle: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
+    width: 112,
+    height: 112,
+    borderRadius: 56,
     backgroundColor: 'rgba(255,255,255,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -182,11 +194,12 @@ const styles = StyleSheet.create({
   },
 
   logoImage: {
-    width: 92,
-    height: 92,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
   },
   brand: {
-    fontSize: 44,
+    fontSize: 40,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: -1,
@@ -199,9 +212,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    borderRadius: 34,
-    padding: 24,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderRadius: 30,
+    padding: 22,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 18 },
     shadowOpacity: 0.22,
