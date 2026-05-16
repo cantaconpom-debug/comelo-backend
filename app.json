@@ -12,15 +12,20 @@
       "backgroundColor": "#FFF7ED"
     },
     "android": {
-      "package": "com.cantaconpom.Comelo",
+      "package": "com.cantaconpom.comeloapp",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFF7ED"
-      }
+      },
+      "versionCode": 3
     },
     "ios": {
       "bundleIdentifier": "com.cantaconpom.Comelo",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "buildNumber": "2"
     },
     "extra": {
       "eas": {
