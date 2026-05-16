@@ -1,10 +1,11 @@
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useState, useEffect, useRef } from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from './supabase';
 import AuthScreen from './AuthScreen';
-import { AppState,
+import {
+  AppState,
   StyleSheet,
   Text,
   View,
@@ -19,6 +20,7 @@ import { AppState,
   Modal,
   TextInput,
   Linking,
+  useWindowDimensions
 } from 'react-native';
 
 const BASE_URL = 'https://name-comelo-backend.onrender.com';
@@ -152,7 +154,10 @@ const imagenReceta = (tipo = '', nombre = '') => {
 
 
 export default function App() {
+  const { width } = useWindowDimensions();
+  const esTablet = width > 900;
   const [sesion, setSesion] = useState(null);
+  const [inicializandoAuth, setInicializandoAuth] = useState(true);
   const [pantalla, setPantalla] = useState('config');
   const [prefs, setPrefs] = useState(['mediterranea']);
   const [personas, setPersonas] = useState('2');
@@ -199,17 +204,30 @@ const [regenerandoRecetaId, setRegenerandoRecetaId] = useState(null);
   const [proteinasObjetivo, setProteinasObjetivo] = useState('30');
   const [carbohidratosObjetivo, setCarbohidratosObjetivo] = useState('50');
 
-  const esPro = profile?.plan === 'pro';
+  const esPro = String(profile?.plan || '').trim().toLowerCase() === 'pro';
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSesion(session);
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setSesion(session);
 
-      if (session?.user) {
-        cargarPerfil(session.user.id);
-        cargarUltimoMenu(session.user.id);
-      }
-    });
+        if (session?.user) {
+          cargarPerfil(session.user.id);
+          cargarUltimoMenu(session.user.id);
+        }
+      })
+      .catch((error) => {
+        console.log('Error obteniendo sesión inicial:', error?.message || error);
+        setSesion(null);
+      })
+      .finally(() => {
+        setInicializandoAuth(false);
+      });
+
+    const authTimeout = setTimeout(() => {
+      console.log('Auth timeout: mostrando login por seguridad');
+      setInicializandoAuth(false);
+    }, 4000);
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSesion(session);
@@ -224,7 +242,10 @@ const [regenerandoRecetaId, setRegenerandoRecetaId] = useState(null);
       }
     });
 
-    return () => listener?.subscription?.unsubscribe();
+    return () => {
+      clearTimeout(authTimeout);
+      listener?.subscription?.unsubscribe();
+    };
   }, []);
 
   const cargarPerfil = async (userId) => {
@@ -366,7 +387,50 @@ const refrescarPerfil = async () => {
   };
 
 
-  const cerrarSesion = async () => {
+  
+  const eliminarCuenta = async () => {
+    Alert.alert(
+      'Eliminar cuenta',
+      'Esta acción eliminará tu cuenta y tus datos asociados. No se puede deshacer.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { data } = await supabase.auth.getSession();
+              const userId = data?.session?.user?.id;
+
+              if (!userId) {
+                Alert.alert('Error', 'No se ha encontrado una sesión activa.');
+                return;
+              }
+
+              await supabase.from('menus').delete().eq('user_id', userId);
+              await supabase.from('profiles').delete().eq('id', userId);
+
+              await supabase.auth.signOut();
+
+              Alert.alert(
+                'Solicitud recibida',
+                'Hemos eliminado tus datos de la app. Si necesitas eliminar definitivamente el usuario de autenticación, contacta con soporte.'
+              );
+
+              setSesion(null);
+              setProfile(null);
+              setPantalla('config');
+            } catch (error) {
+              console.log('Error eliminando cuenta:', error);
+              Alert.alert('Error', 'No se ha podido eliminar la cuenta.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+const cerrarSesion = async () => {
     await supabase.auth.signOut();
     setMenu(null);
     setPantalla('config');
@@ -684,6 +748,15 @@ const generarMenu = async () => {
   };
 
 
+  if (inicializandoAuth) {
+    return (
+      <View style={styles.authLoadingScreen}>
+        <Image source={require('./assets/logo-comelo.png')} style={styles.authLoadingLogo} resizeMode="contain" />
+        <Text style={styles.authLoadingText}>Preparando Comelo...</Text>
+      </View>
+    );
+  }
+
   if (!sesion) return <AuthScreen />;
 
   const superData = getSuperData();
@@ -764,7 +837,12 @@ const generarMenu = async () => {
                   </TouchableOpacity>
                 )}
 
-                <TouchableOpacity
+                
+        <TouchableOpacity style={styles.deleteAccountBtn} onPress={eliminarCuenta}>
+          <Text style={styles.deleteAccountBtnText}>Eliminar cuenta</Text>
+        </TouchableOpacity>
+
+<TouchableOpacity
                   activeOpacity={0.82}
                   style={styles.accountLogoutBtn}
                   onPress={cerrarSesion}
@@ -789,7 +867,7 @@ const generarMenu = async () => {
               
               {!esPro && (
                 <View style={styles.limitCard}>
-                  <Text style={styles.limitTitle}>⚡ Plan Free</Text>
+                  <Text style={styles.limitTitle}>⚡ {esPro ? 'Plan PRO' : 'PLAN FREE'}</Text>
 
                   <Text style={styles.limitText}>
                     Generaciones restantes hoy: {remainingGenerations}/3
@@ -987,7 +1065,7 @@ const generarMenu = async () => {
               
               {!esPro && (
                 <View style={styles.limitCard}>
-                  <Text style={styles.limitTitle}>⚡ Plan Free</Text>
+                  <Text style={styles.limitTitle}>⚡ {esPro ? 'Plan PRO' : 'PLAN FREE'}</Text>
 
                   <Text style={styles.limitText}>
                     Generaciones restantes hoy: {remainingGenerations}/3
@@ -1499,12 +1577,7 @@ const generarMenu = async () => {
                 </View>
               )}
 
-              <View style={styles.iaComingSoon}>
-                <Text style={styles.iaComingTitle}>Próximamente</Text>
-                <Text style={styles.iaComingItem}>🔄 Regenerar solo una receta</Text>
-                <Text style={styles.iaComingItem}>🥗 Sustituciones inteligentes</Text>
-                <Text style={styles.iaComingItem}>🎯 Menú por objetivo fitness</Text>
-              </View>
+              
 
               <View style={{ height: 50 }} />
             </ScrollView>
@@ -1926,6 +1999,25 @@ const generarMenu = async () => {
 }
 
 const styles = StyleSheet.create({
+  authLoadingScreen: {
+    flex: 1,
+    backgroundColor: '#FFF8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  authLoadingLogo: {
+    width: 150,
+    height: 150,
+    borderRadius: 36,
+    marginBottom: 18,
+  },
+  authLoadingText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2D2A26',
+    textAlign: 'center',
+  },
   bgImage: { flex: 1 },
   overlay: { flex: 1, backgroundColor: 'rgba(255,255,255,0.18)' },
   container: { flex: 1 },
@@ -4426,8 +4518,33 @@ Object.assign(styles, {
   },
 
   creditBtnTxt: {
-    color: '#FFFFFF',
-    fontSize: 14,
+  color: '#FFFFFF',
+  fontSize: 14,
+  fontWeight: '900',
+},
+
+logoImage: {
+  width: '100%',
+  height: '100%',
+},
+
+
+  deleteAccountBtn: {
+    backgroundColor: '#FFE8E8',
+    borderWidth: 1,
+    borderColor: '#FF3B30',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 18,
+    alignItems: 'center',
+    marginTop: 18,
+    marginBottom: 10,
+  },
+
+  deleteAccountBtnText: {
+    color: '#FF3B30',
+    fontSize: 15,
     fontWeight: '900',
   },
+
 });
