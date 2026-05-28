@@ -4,6 +4,7 @@ import React, {useState, useEffect, useRef} from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from './supabase';
 import AuthScreen from './AuthScreen';
+import { iniciarRevenueCat, comprarProMensual, restaurarCompras } from './revenuecat';
 import {
   AppState,
   StyleSheet,
@@ -210,6 +211,7 @@ const [regenerandoRecetaId, setRegenerandoRecetaId] = useState(null);
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
         setSesion(session);
+      iniciarRevenueCat(session?.user?.id);
 
         if (session?.user) {
           cargarPerfil(session.user.id);
@@ -231,6 +233,7 @@ const [regenerandoRecetaId, setRegenerandoRecetaId] = useState(null);
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSesion(session);
+      iniciarRevenueCat(session?.user?.id);
 
       if (session?.user) {
         cargarPerfil(session.user.id);
@@ -543,6 +546,40 @@ const cerrarSesion = async () => {
     }
   };
 
+
+
+
+  async function activarPlanPro() {
+    try {
+
+      const acceso = await comprarProMensual();
+
+      if (!acceso) {
+        alert('No se pudo activar Comelo Pro');
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user?.id) {
+        await supabase
+          .from('profiles')
+          .update({ plan: 'pro' })
+          .eq('id', user.id);
+
+        setProfile(prev => ({
+          ...prev,
+          plan: 'pro'
+        }));
+
+        alert('🎉 ¡Comelo Pro activado!');
+      }
+
+    } catch (e) {
+      console.log(e);
+      alert('Error activando Pro');
+    }
+  }
 
 const generarMenu = async () => {
     if (!sesion?.user) return;
